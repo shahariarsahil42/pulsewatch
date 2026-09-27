@@ -2,7 +2,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, Query, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +21,7 @@ from backend.app.schemas import (
     LogLevel,
     MetricsSummary,
 )
+from backend.app.websocket_manager import connection_manager
 
 
 @asynccontextmanager
@@ -52,7 +60,7 @@ def health_check():
     response_model=LogEventResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_event(
+async def create_event(
     event: LogEventCreate,
     database: Session = Depends(get_database),
 ):
@@ -63,6 +71,19 @@ def create_event(
     database.add(database_event)
     database.commit()
     database.refresh(database_event)
+
+    response_event = LogEventResponse.model_validate(
+        database_event
+    )
+
+    await connection_manager.broadcast(
+        {
+            "type": "new_event",
+            "data": response_event.model_dump(
+                mode="json",
+            ),
+        }
+    )
 
     return database_event
 
@@ -146,3 +167,16 @@ def get_metrics_summary(
         ),
         monitored_services=monitored_services or 0,
     )
+
+
+@app.websocket("/ws/events")
+async def event_websocket(
+    websocket: WebSocket,
+):
+    await connection_manager.connect(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        connection_manager.disconnect(websocket)

@@ -152,3 +152,28 @@ def test_metrics_summary():
     assert response_body["warning_count"] == 1
     assert response_body["average_response_time_ms"] == 533.33
     assert response_body["monitored_services"] == 2
+
+
+def test_websocket_receives_new_event():
+    with client.websocket_connect(
+        "/ws/events"
+    ) as websocket:
+        response = client.post(
+            "/events",
+            json={
+                "service_name": "notification-api",
+                "level": "warning",
+                "message": "Email delivery is delayed",
+                "response_time_ms": 800,
+            },
+        )
+
+        websocket_message = websocket.receive_json()
+
+    assert response.status_code == 201
+    assert websocket_message["type"] == "new_event"
+    assert (
+        websocket_message["data"]["service_name"]
+        == "notification-api"
+    )
+    assert websocket_message["data"]["level"] == "warning"
