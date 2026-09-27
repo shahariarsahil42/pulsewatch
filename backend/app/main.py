@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Query, status
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from backend.app.database import Base, engine, get_database
@@ -12,6 +12,7 @@ from backend.app.schemas import (
     LogEventCreate,
     LogEventResponse,
     LogLevel,
+    MetricsSummary,
 )
 
 
@@ -97,3 +98,51 @@ def list_events(
         )
 
     return database.scalars(statement).all()
+
+
+@app.get(
+    "/metrics/summary",
+    response_model=MetricsSummary,
+)
+def get_metrics_summary(
+    database: Session = Depends(get_database),
+):
+    statement = select(
+        func.count(LogEvent.id),
+        func.sum(
+            case(
+                (LogEvent.level == "error", 1),
+                else_=0,
+            )
+        ),
+        func.sum(
+            case(
+                (LogEvent.level == "warning", 1),
+                else_=0,
+            )
+        ),
+        func.avg(LogEvent.response_time_ms),
+        func.count(
+            func.distinct(LogEvent.service_name)
+        ),
+    )
+
+    (
+        total_events,
+        error_count,
+        warning_count,
+        average_response_time,
+        monitored_services,
+    ) = database.execute(statement).one()
+
+    return MetricsSummary(
+        total_events=total_events or 0,
+        error_count=error_count or 0,
+        warning_count=warning_count or 0,
+        average_response_time_ms=(
+            round(float(average_response_time), 2)
+            if average_response_time is not None
+            else None
+        ),
+        monitored_services=monitored_services or 0,
+    )

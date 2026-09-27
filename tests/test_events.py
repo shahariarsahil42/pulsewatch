@@ -107,3 +107,48 @@ def test_list_and_filter_events():
     assert error_events_response.status_code == 200
     assert len(error_events_response.json()) == 1
     assert error_events_response.json()[0]["level"] == "error"
+
+
+def test_metrics_summary():
+    client.post(
+        "/events",
+        json={
+            "service_name": "checkout-api",
+            "level": "error",
+            "message": "Payment failed",
+            "response_time_ms": 1000,
+        },
+    )
+
+    client.post(
+        "/events",
+        json={
+            "service_name": "checkout-api",
+            "level": "warning",
+            "message": "Payment was slow",
+            "response_time_ms": 500,
+        },
+    )
+
+    client.post(
+        "/events",
+        json={
+            "service_name": "profile-api",
+            "level": "info",
+            "message": "Profile loaded",
+            "response_time_ms": 100,
+        },
+    )
+
+    response = client.get(
+        "/metrics/summary",
+    )
+
+    response_body = response.json()
+
+    assert response.status_code == 200
+    assert response_body["total_events"] == 3
+    assert response_body["error_count"] == 1
+    assert response_body["warning_count"] == 1
+    assert response_body["average_response_time_ms"] == 533.33
+    assert response_body["monitored_services"] == 2

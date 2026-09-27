@@ -44,3 +44,11 @@ class LogEventResponse(LogEventCreate):
 
     id: int
     created_at: datetime
+
+
+class MetricsSummary(BaseModel):
+    total_events: int
+    error_count: int
+    warning_count: int
+    average_response_time_ms: float | None
+    monitored_services: int
