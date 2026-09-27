@@ -1,0 +1,109 @@
+from collections.abc import Generator
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, delete
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from backend.app.database import Base, get_database
+from backend.app.main import app
+from backend.app.models import LogEvent
+
+
+test_engine = create_engine(
+    "sqlite://",
+    connect_args={
+        "check_same_thread": False,
+    },
+    poolclass=StaticPool,
+)
+
+TestSessionLocal = sessionmaker(
+    bind=test_engine,
+    autocommit=False,
+    autoflush=False,
+)
+
+Base.metadata.create_all(bind=test_engine)
+
+
+def override_get_database() -> Generator[Session, None, None]:
+    database = TestSessionLocal()
+
+    try:
+        yield database
+    finally:
+        database.close()
+
+
+app.dependency_overrides[get_database] = override_get_database
+
+client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def clear_test_database():
+    with TestSessionLocal() as database:
+        database.execute(delete(LogEvent))
+        database.commit()
+
+    yield
+
+
+def test_create_event():
+    response = client.post(
+        "/events",
+        json={
+            "service_name": "checkout-api",
+            "level": "error",
+            "message": "Payment request timed out",
+            "endpoint": "/api/payments",
+            "response_time_ms": 2500,
+        },
+    )
+
+    response_body = response.json()
+
+    assert response.status_code == 201
+    assert response_body["id"] == 1
+    assert response_body["service_name"] == "checkout-api"
+    assert response_body["level"] == "error"
+
+
+def test_list_and_filter_events():
+    client.post(
+        "/events",
+        json={
+            "service_name": "checkout-api",
+            "level": "error",
+            "message": "Payment failed",
+        },
+    )
+
+    client.post(
+        "/events",
+        json={
+            "service_name": "profile-api",
+            "level": "info",
+            "message": "Profile loaded",
+        },
+    )
+
+    all_events_response = client.get(
+        "/events",
+    )
+
+    error_events_response = client.get(
+        "/events",
+        params={
+            "level": "error",
+        },
+    )
+
+    assert all_events_response.status_code == 200
+    assert len(all_events_response.json()) == 2
+
+    assert error_events_response.status_code == 200
+    assert len(error_events_response.json()) == 1
+    assert error_events_response.json()[0]["level"] == "error"
