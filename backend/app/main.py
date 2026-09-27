@@ -21,6 +21,7 @@ from backend.app.schemas import (
     LogLevel,
     MetricsSummary,
 )
+from backend.app.security import verify_api_key
 from backend.app.websocket_manager import connection_manager
 
 
@@ -59,6 +60,9 @@ def health_check():
     "/events",
     response_model=LogEventResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(verify_api_key),
+    ],
 )
 async def create_event(
     event: LogEventCreate,

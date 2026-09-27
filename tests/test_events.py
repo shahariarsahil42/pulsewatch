@@ -41,6 +41,10 @@ app.dependency_overrides[get_database] = override_get_database
 
 client = TestClient(app)
 
+AUTH_HEADERS = {
+    "X-API-Key": "pulsewatch-development-key",
+}
+
 
 @pytest.fixture(autouse=True)
 def clear_test_database():
@@ -54,6 +58,7 @@ def clear_test_database():
 def test_create_event():
     response = client.post(
         "/events",
+        headers=AUTH_HEADERS,
         json={
             "service_name": "checkout-api",
             "level": "error",
@@ -71,9 +76,26 @@ def test_create_event():
     assert response_body["level"] == "error"
 
 
+def test_reject_event_without_api_key():
+    response = client.post(
+        "/events",
+        json={
+            "service_name": "checkout-api",
+            "level": "error",
+            "message": "Unauthorized event",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Invalid or missing API key",
+    }
+
+
 def test_list_and_filter_events():
     client.post(
         "/events",
+        headers=AUTH_HEADERS,
         json={
             "service_name": "checkout-api",
             "level": "error",
@@ -83,6 +105,7 @@ def test_list_and_filter_events():
 
     client.post(
         "/events",
+        headers=AUTH_HEADERS,
         json={
             "service_name": "profile-api",
             "level": "info",
@@ -112,6 +135,7 @@ def test_list_and_filter_events():
 def test_metrics_summary():
     client.post(
         "/events",
+        headers=AUTH_HEADERS,
         json={
             "service_name": "checkout-api",
             "level": "error",
@@ -122,6 +146,7 @@ def test_metrics_summary():
 
     client.post(
         "/events",
+        headers=AUTH_HEADERS,
         json={
             "service_name": "checkout-api",
             "level": "warning",
@@ -132,6 +157,7 @@ def test_metrics_summary():
 
     client.post(
         "/events",
+        headers=AUTH_HEADERS,
         json={
             "service_name": "profile-api",
             "level": "info",
@@ -160,6 +186,7 @@ def test_websocket_receives_new_event():
     ) as websocket:
         response = client.post(
             "/events",
+            headers=AUTH_HEADERS,
             json={
                 "service_name": "notification-api",
                 "level": "warning",
