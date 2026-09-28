@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////data/pulsewatch.db
+      PULSEWATCH_API_KEY: ${PULSEWATCH_API_KEY:-pulsewatch-development-key}
+    volumes:
+      - pulsewatch_data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pulsewatch_data:
