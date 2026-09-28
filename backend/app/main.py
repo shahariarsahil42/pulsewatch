@@ -10,6 +10,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
@@ -38,6 +39,16 @@ app = FastAPI(
     description="Real-time application monitoring platform",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
