@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import "./App.css";
 
 type LogLevel =
@@ -45,7 +49,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadMetrics() {
+  const loadMetrics = useCallback(async () => {
     const response = await fetch(
       `${API_URL}/metrics/summary`,
     );
@@ -56,12 +60,10 @@ function App() {
 
     const data: MetricsSummary = await response.json();
     setMetrics(data);
-  }
+  }, []);
 
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     try {
-      setErrorMessage("");
-
       const [eventsResponse, metricsResponse] =
         await Promise.all([
           fetch(`${API_URL}/events?limit=50`),
@@ -78,6 +80,7 @@ function App() {
       const metricsData: MetricsSummary =
         await metricsResponse.json();
 
+      setErrorMessage("");
       setEvents(eventsData);
       setMetrics(metricsData);
     } catch {
@@ -87,10 +90,12 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    void loadDashboard();
+    const initialLoadTimer = window.setTimeout(() => {
+      void loadDashboard();
+    }, 0);
 
     const websocket = new WebSocket(WEBSOCKET_URL);
 
@@ -123,9 +128,10 @@ function App() {
     };
 
     return () => {
+      window.clearTimeout(initialLoadTimer);
       websocket.close();
     };
-  }, []);
+  }, [loadDashboard, loadMetrics]);
 
   function formatTime(timestamp: string) {
     return new Date(timestamp).toLocaleString(
